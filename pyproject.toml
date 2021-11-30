@@ -1,0 +1,10 @@
+[build-system]
+requires = [
+    "albumentations",
+    "opencv-contrib-python",
+    "Pillow",
+    "tensorflow>=2.0.0",
+    "torch",
+    "torchvision"
+]
+build-backend = "setuptools.build_meta"

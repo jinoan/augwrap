@@ -1,0 +1,5 @@
+albumentations
+opencv-contrib-python
+tensorflow
+torch
+torchvision
