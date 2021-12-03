@@ -128,3 +128,82 @@ class KelvinWB(ImageOnlyTransform):
         image = image.convert('RGB', matrix)
         image = np.array(image)
         return image
+
+
+class Mosaic(BasicTransform):
+    def __init__(
+        self,
+        dataset,
+        height_split_range=(0.25, 0.75),
+        width_split_range=(0.25, 0.75),
+        transforms=[],
+        bbox_params=None,
+        always_apply=False,
+        p=0.5,
+    ):
+        super(Mosaic, self).__init__(always_apply, p)
+        self.dataset = dataset
+        self.height_split_range = height_split_range
+        self.width_split_range = width_split_range
+        if bbox_params is None:
+            bbox_params = A.BboxParams(format=dataset.bbox_format, min_area=0.3, min_visibility=0.3, label_fields=['labels'])
+        self.transforms = A.Compose(transforms, bbox_params=bbox_params)
+        self.bbox_params = bbox_params
+
+    @property
+    def target_dependence(self):
+        return {'image': ['bboxes', 'labels']}
+
+    def get_piece(self, data, h, w):
+        data = self.transforms(**data)
+        height, width = data['image'].shape[:2]
+        if height >= h and width >= w:
+            data = A.Compose([A.RandomCrop(always_apply=True, height=h, width=w)], bbox_params=self.bbox_params)(**data)
+        else:
+            data = A.Compose([A.Resize(always_apply=True, height=h, width=w)], bbox_params=self.bbox_params)(**data)
+        return data
+
+    def locate_bboxes(self, piece, h_r, w_r, h_p, w_p):
+        def locate_bbox(bbox):
+            return [w_r * w_p + bbox[0][0] * abs(w_p - w_r),
+                    h_r * h_p + bbox[0][1] * abs(h_p - h_r),
+                    w_r * w_p + bbox[0][2] * abs(w_p - w_r),
+                    h_r * h_p + bbox[0][3] * abs(h_p - h_r),
+                    bbox[1]]
+        return list(map(locate_bbox, zip(piece['bboxes'], piece['labels'])))
+
+    def apply(self, image, **params):
+        height, width = params['rows'], params['cols']
+        bboxes, labels = [], []
+        for bbox in params['bboxes']:
+            bboxes.append(list(bbox[:-1]))
+            labels.append(bbox[-1])
+        params['bboxes'] = bboxes
+        params['labels'] = labels
+        
+        h_r = random.uniform(*self.height_split_range)
+        w_r = random.uniform(*self.width_split_range)
+        h = int(height * h_r + 0.5)
+        w = int(width * w_r + 0.5)
+        tl = self.get_piece({'image': image, **params}, h, w)
+        tr = self.get_piece(self.dataset[random.randrange(self.dataset.__len__())], h, width - w)
+        bl = self.get_piece(self.dataset[random.randrange(self.dataset.__len__())], height - h, w)
+        br = self.get_piece(self.dataset[random.randrange(self.dataset.__len__())], height - h, width - w)
+        t = np.concatenate((tl['image'], tr['image']), axis=1)
+        b = np.concatenate((bl['image'], br['image']), axis=1)
+        image = np.concatenate((t, b), axis=0)
+
+        bboxes = self.locate_bboxes(tl, h_r, w_r, 0, 0)
+        bboxes += self.locate_bboxes(tr, h_r, w_r, 0, 1)
+        bboxes += self.locate_bboxes(bl, h_r, w_r, 1, 0)
+        bboxes += self.locate_bboxes(br, h_r, w_r, 1, 1)
+        self.bboxes = bboxes
+
+        return image
+
+    def apply_to_bboxes(self, bboxes, **params):
+        return deepcopy(self.bboxes)
+
+    @property
+    def targets(self):
+        return {'image': self.apply, 'bboxes': self.apply_to_bboxes}
