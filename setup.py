@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="augwrap",
-    version="0.0.1-alpha.2",
+    version="0.0.1-alpha.3",
     author="jinoan",
     author_email="jinoan89@gmail.com",
     description="Image augmentation auxiliary tool",

@@ -3,10 +3,11 @@ import random
 import numpy as np
 import json
 from PIL import Image
-from albumentations import BasicTransform, ImageOnlyTransform
+import albumentations as A
+from copy import deepcopy
 
 
-class CutMix(BasicTransform):
+class CutMix(A.BasicTransform):
     def __init__(
         self,
         dataset,
@@ -65,7 +66,7 @@ def rand_bbox(image_shape, bbox_width_range, bbox_height_range, pad_size):
     return bx, by, bw, bh, r
 
 
-class MixUp(BasicTransform):
+class MixUp(A.BasicTransform):
     def __init__(
         self,
         dataset,
@@ -99,7 +100,7 @@ class MixUp(BasicTransform):
         return {"image": self.image_apply, "label": self.label_apply}
 
 
-class KelvinWB(ImageOnlyTransform):
+class KelvinWB(A.ImageOnlyTransform):
     def __init__(
         self,
         k_min=5000,
@@ -130,7 +131,7 @@ class KelvinWB(ImageOnlyTransform):
         return image
 
 
-class Mosaic(BasicTransform):
+class Mosaic(A.BasicTransform):
     def __init__(
         self,
         dataset,

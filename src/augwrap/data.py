@@ -7,6 +7,7 @@ import cv2
 from sklearn.model_selection import KFold as KF, StratifiedKFold as SKF
 from torch.utils.data import Dataset
 from tensorflow.keras.utils import Sequence
+import xml.etree.ElementTree as ET
 
 
 class BaseDataset:
