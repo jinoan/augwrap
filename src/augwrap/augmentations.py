@@ -160,7 +160,10 @@ class RandomLocateInFrame(A.BasicTransform):
                 'labels': ['image', 'bboxes']}
 
     def crop_side_with_safe_bbox(self, frame_side, img_side, safe_set):
-        side_min = random.choice(list(set(range(img_side - frame_side)) & safe_set))
+        lst = list(set(range(img_side - frame_side)) & safe_set)
+        if len(lst) == 0:
+            lst.append(0)
+        side_min = random.choice(lst)
         side_max = side_min + frame_side + 1
         while side_max < img_side:
             if side_max in safe_set:

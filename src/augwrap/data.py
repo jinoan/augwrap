@@ -278,9 +278,9 @@ class LoadPascalVOCLabels:
         for obj in objects:
             labels.append(obj.find('name').text)
             box = obj.find('bndbox')
-            xmin = int(box.find('xmin').text) / width
-            ymin = int(box.find('ymin').text) / height
-            xmax = int(box.find('xmax').text) / width
-            ymax = int(box.find('ymax').text) / height
+            xmin = float(box.find('xmin').text) / width
+            ymin = float(box.find('ymin').text) / height
+            xmax = float(box.find('xmax').text) / width
+            ymax = float(box.find('ymax').text) / height
             bboxes.append([xmin, ymin, xmax, ymax])
         return labels, bboxes
