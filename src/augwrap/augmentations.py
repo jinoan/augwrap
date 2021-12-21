@@ -217,8 +217,8 @@ class RandomLocateInFrame(A.BasicTransform):
         new_bboxes = []
         img_h, img_w, _ = params['image'].shape
         for bbox in bboxes:
-            x_min, y_min, x_max, y_max = bbox[0] * img_w, bbox[1] * img_h, bbox[2] * img_w, bbox[3] * img_h
-            if x_min >= self.img_w_min and y_min >= self.img_h_min and x_max < self.img_w_max and y_max < self.img_h_max:
+            x_min, y_min, x_max, y_max = int(bbox[0] * img_w + 0.5), int(bbox[1] * img_h + 0.5), int(bbox[2] * img_w + 0.5), int(bbox[3] * img_h + 0.5)
+            if x_min >= self.img_w_min and y_min >= self.img_h_min and x_max <= self.img_w_max and y_max <= self.img_h_max:
                 new_bbox = (
                     ((x_min - self.img_w_min) * self.r + self.w_min) / self.w,
                     ((y_min - self.img_h_min) * self.r + self.h_min) / self.h,
