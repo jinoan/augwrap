@@ -270,8 +270,8 @@ class Mosaic(A.BasicTransform):
 
     def get_piece(self, data, h, w):
         transforms = self.transforms + [RandomLocateInFrame(h, w, always_apply=True)]
-        annotation = A.Compose(transforms, bbox_params=self.bbox_params)
-        data = annotation(**data)
+        augmentation = A.Compose(transforms, bbox_params=self.bbox_params)
+        data = augmentation(**data)
         return data
 
     def locate_bboxes(self, piece, h_r, w_r, h_p, w_p):
