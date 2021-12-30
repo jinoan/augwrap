@@ -1,4 +1,5 @@
 import os
+import glob
 import json
 import random
 import numpy as np
@@ -314,6 +315,138 @@ class Mosaic(A.BasicTransform):
 
     def apply_to_bboxes(self, bboxes, **params):
         return deepcopy(self.bboxes)
+
+    @property
+    def targets(self):
+        return {'image': self.apply, 'bboxes': self.apply_to_bboxes}
+
+
+class Sticker(A.BasicTransform):
+    # crop the boxes from target image and paste it on another image.
+    def __init__(
+        self,
+        dataset,
+        scale_range=(0.95, 1.05),
+        degree_range=(-5, 5),
+        interpolation=cv2.INTER_LINEAR,
+        border_mode=cv2.BORDER_CONSTANT,
+        backgrounds=None,
+        transforms=[],
+        bg_transforms=[],
+        bbox_params=None,
+        always_apply=False,
+        p=0.5,
+    ):
+        super(Sticker, self).__init__(always_apply, p)
+        self.dataset = dataset
+        self.scale_range = scale_range
+        self.degree_range = degree_range
+        self.interpolation = interpolation
+        self.border_mode = border_mode
+        self.backgrounds = backgrounds
+        self.transforms = transforms
+        self.bg_transforms = bg_transforms
+        if bbox_params is None:
+            self.bbox_params = A.BboxParams(format=dataset.bbox_format, min_area=0.3, min_visibility=0.3, label_fields=['labels'])
+
+    @property
+    def target_dependence(self):
+        return {'image': ['bboxes', 'labels']}
+
+    def detach(self, image, bbox, label):
+        h, w, _ = image.shape
+        transforms = [
+            A.Crop(int(bbox[0] * w + 0.5), int(bbox[1] * h + 0.5), int(bbox[2] * w + 0.5), int(bbox[3] * h + 0.5), always_apply=True),
+            ] + self.transforms
+        transformed = A.Compose(transforms, bbox_params=self.bbox_params)
+        return transformed(image=image, bboxes=[bbox], labels=[label])
+
+    def attach(self, data, background):
+        h, w, _ = data['image'].shape
+        bg_h, bg_w, _ = background.shape
+        s = random.uniform(*self.scale_range)
+        r = np.pi * random.uniform(*self.degree_range) / 180
+        mtrx = np.array([[s * np.cos(r), s * -np.sin(r), 0],
+                         [s * np.sin(r), s * np.cos(r), 0]])
+        x_min, y_min, x_max, y_max = data['bboxes'][0]
+        _x_min, _y_min, _x_max, _y_max = self.rotate_bbox((x_min * w, y_min * h, x_max * w, y_max * h), mtrx)
+        x_min, y_min, x_max, y_max = 0, 0, _x_max - _x_min, _y_max - _y_min
+
+        x_move = random.randrange(max(bg_w - int(x_max + 0.5), 0) + 1)
+        y_move = random.randrange(max(bg_h - int(y_max + 0.5), 0) + 1)
+        mtrx[0, 2] = x_move - _x_min
+        mtrx[1, 2] = y_move - _y_min
+        rst = cv2.warpAffine(data['image'], mtrx, (bg_w, bg_h), flags=self.interpolation, borderMode=self.border_mode)
+
+        if np.sum(np.max(self.attach_board, axis=2) * np.max(rst, axis=2)) == 0:
+            self.attach_board += rst
+            bbox = ((x_min + x_move) / bg_w,
+                    (y_min + y_move) / bg_h,
+                    (x_max + x_move) / bg_w,
+                    (y_max + y_move) / bg_h)
+            self.attached_bboxes.append(bbox)
+            self.attached_labels.append(data['labels'][0])
+
+    def rotate_bbox(self, bbox, M):
+        # unit: pixel
+        x_min, y_min, x_max, y_max = bbox
+        loc00 = M @ np.array([[x_min, y_min, 1]]).T
+        loc01 = M @ np.array([[x_min, y_max, 1]]).T
+        loc10 = M @ np.array([[x_max, y_min, 1]]).T
+        loc11 = M @ np.array([[x_max, y_max, 1]]).T
+        con = np.concatenate((loc00, loc01, loc10, loc11), axis=1)
+        x_min, y_min = np.min(con, axis=1)
+        x_max, y_max = np.max(con, axis=1)
+        return x_min, y_min, x_max, y_max
+
+    def trim_bbox(self, bbox):
+        x_min, y_min, x_max, y_max = bbox
+        return max(x_min, 0.), max(y_min, 0.), min(x_max, 1.), min(y_max, 1.)
+
+    def apply(self, image, **params):
+        bboxes, labels = [], []
+        for bbox in params['bboxes']:
+            bboxes.append(list(bbox[:-1]))
+            labels.append(bbox[-1])
+
+        self.attached_bboxes = []
+        self.attached_labels = []
+
+        if self.backgrounds is not None:
+            background = cv2.imread(random.choice(glob.glob(os.path.join(self.backgrounds, '*'))))
+            background = A.Compose(self.bg_transforms)(image=background)['image']
+        else:
+            bg_sample = self.dataset[random.randrange(self.dataset.__len__())]
+            bg_sample = A.Compose(self.bg_transforms, bbox_params=self.bbox_params)(**bg_sample)
+            background = bg_sample['image']
+            self.attached_bboxes += bg_sample['bboxes']
+            self.attached_labels += bg_sample['labels']
+
+        self.attach_board = np.zeros(background.shape, dtype=np.uint8)
+        for bbox in self.attached_bboxes:
+            bg_h, bg_w, _ = background.shape
+            x_min, y_min, x_max, y_max = int(bbox[0] * bg_w + 0.5), int(bbox[1] * bg_h + 0.5), int(bbox[2] * bg_w + 0.5), int(bbox[3] * bg_h + 0.5)
+            self.attach_board[y_min:y_max+1, x_min:x_max+1, ...] = background[y_min:y_max+1, x_min:x_max+1, ...]
+        
+        indexes = list(range(len(bboxes)))
+        random.shuffle(indexes)
+
+        for i in indexes:
+            x_min, y_min, x_max, y_max = bboxes[i]
+            if x_min >= 0 and y_min >= 0 and x_max <= 1 and y_max <= 1:
+                data = self.detach(image, bboxes[i], labels[i])
+                self.attach(data, background)
+
+        mask = np.repeat(np.expand_dims(np.where(np.max(self.attach_board, axis=2) > 0, np.uint8(0), np.uint8(255)), axis=2), 3, axis=2)
+        img = cv2.bitwise_and(background, mask) + self.attach_board
+        return img
+
+    def apply_to_bboxes(self, bboxes, **params):
+        bboxes = []
+        for bbox, label in zip(self.attached_bboxes, self.attached_labels):
+            bbox = self.trim_bbox(bbox)
+            bboxes.append((*bbox, label))
+        return bboxes
 
     @property
     def targets(self):
