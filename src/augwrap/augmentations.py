@@ -361,14 +361,14 @@ class Sticker(A.BasicTransform):
         transformed = A.Compose(transforms, bbox_params=self.bbox_params)
         return transformed(image=image, bboxes=[bbox], labels=[label])
 
-    def attach(self, data, background):
-        h, w, _ = data['image'].shape
-        bg_h, bg_w, _ = background.shape
+    def attach(self, sticker, bg, bbox, mask_board):
+        h, w, _ = sticker.shape
+        bg_h, bg_w, _ = bg.shape
         s = random.uniform(*self.scale_range)
         r = np.pi * random.uniform(*self.degree_range) / 180
         mtrx = np.array([[s * np.cos(r), s * -np.sin(r), 0],
                          [s * np.sin(r), s * np.cos(r), 0]])
-        x_min, y_min, x_max, y_max = data['bboxes'][0]
+        x_min, y_min, x_max, y_max = bbox
         _x_min, _y_min, _x_max, _y_max = self.rotate_bbox((x_min * w, y_min * h, x_max * w, y_max * h), mtrx)
         x_min, y_min, x_max, y_max = 0, 0, _x_max - _x_min, _y_max - _y_min
 
@@ -376,16 +376,19 @@ class Sticker(A.BasicTransform):
         y_move = random.randrange(max(bg_h - int(y_max + 0.5), 0) + 1)
         mtrx[0, 2] = x_move - _x_min
         mtrx[1, 2] = y_move - _y_min
-        rst = cv2.warpAffine(data['image'], mtrx, (bg_w, bg_h), flags=self.interpolation, borderMode=self.border_mode)
+        mask = cv2.warpAffine(np.ones(sticker.shape, dtype=np.uint8) * 255, mtrx, (bg_w, bg_h), flags=self.interpolation, borderMode=self.border_mode)
 
-        if np.sum(np.max(self.attach_board, axis=2) * np.max(rst, axis=2)) == 0:
-            self.attach_board += rst
+        if np.sum(np.max(mask_board, axis=2) * np.max(mask, axis=2)) == 0:
+            sticker = cv2.warpAffine(sticker, mtrx, (bg_w, bg_h), flags=self.interpolation, borderMode=self.border_mode)
+            bg = cv2.bitwise_and(bg, cv2.bitwise_not(mask)) + sticker
+            mask_board += mask
             bbox = ((x_min + x_move) / bg_w,
                     (y_min + y_move) / bg_h,
                     (x_max + x_move) / bg_w,
                     (y_max + y_move) / bg_h)
-            self.attached_bboxes.append(bbox)
-            self.attached_labels.append(data['labels'][0])
+            return bg, bbox, mask_board
+        else:
+            return None
 
     def rotate_bbox(self, bbox, M):
         # unit: pixel
@@ -413,20 +416,20 @@ class Sticker(A.BasicTransform):
         self.attached_labels = []
 
         if self.backgrounds is not None:
-            background = cv2.imread(random.choice(glob.glob(os.path.join(self.backgrounds, '*'))))
-            background = A.Compose(self.bg_transforms)(image=background)['image']
+            bg = cv2.imread(random.choice(glob.glob(os.path.join(self.backgrounds, '*'))))
+            bg = A.Compose(self.bg_transforms)(image=bg)['image']
         else:
             bg_sample = self.dataset[random.randrange(self.dataset.__len__())]
             bg_sample = A.Compose(self.bg_transforms, bbox_params=self.bbox_params)(**bg_sample)
-            background = bg_sample['image']
+            bg = bg_sample['image']
             self.attached_bboxes += bg_sample['bboxes']
             self.attached_labels += bg_sample['labels']
 
-        self.attach_board = np.zeros(background.shape, dtype=np.uint8)
+        mask_board = np.zeros(bg.shape, dtype=np.uint8)
         for bbox in self.attached_bboxes:
-            bg_h, bg_w, _ = background.shape
+            bg_h, bg_w, _ = bg.shape
             x_min, y_min, x_max, y_max = int(bbox[0] * bg_w + 0.5), int(bbox[1] * bg_h + 0.5), int(bbox[2] * bg_w + 0.5), int(bbox[3] * bg_h + 0.5)
-            self.attach_board[y_min:y_max+1, x_min:x_max+1, ...] = background[y_min:y_max+1, x_min:x_max+1, ...]
+            mask_board[y_min:y_max+1, x_min:x_max+1, ...] = 255
         
         indexes = list(range(len(bboxes)))
         random.shuffle(indexes)
@@ -435,11 +438,12 @@ class Sticker(A.BasicTransform):
             x_min, y_min, x_max, y_max = bboxes[i]
             if x_min >= 0 and y_min >= 0 and x_max <= 1 and y_max <= 1:
                 data = self.detach(image, bboxes[i], labels[i])
-                self.attach(data, background)
+                if rst := self.attach(data['image'], bg, data['bboxes'][0], mask_board):
+                    bg, bbox, mask_board = rst
+                    self.attached_bboxes.append(bbox)
+                    self.attached_labels.append(data['labels'][0])
 
-        mask = np.repeat(np.expand_dims(np.where(np.max(self.attach_board, axis=2) > 0, np.uint8(0), np.uint8(255)), axis=2), 3, axis=2)
-        img = cv2.bitwise_and(background, mask) + self.attach_board
-        return img
+        return bg
 
     def apply_to_bboxes(self, bboxes, **params):
         bboxes = []
