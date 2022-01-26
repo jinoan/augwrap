@@ -5,9 +5,8 @@ from copy import copy
 import numpy as np
 import cv2
 from sklearn.model_selection import KFold as KF, StratifiedKFold as SKF
-from torch.utils.data import Dataset
-from tensorflow.keras.utils import Sequence
 import xml.etree.ElementTree as ET
+import logging
 
 
 class BaseDataset:
@@ -24,46 +23,57 @@ class BaseDataset:
         return {'image': self.images[index], 'label': self.labels[index]}
 
 
-class TorchBaseDataset(Dataset):
-    def __init__(
-        self,
-        images=None,
-        labels=None,
-        classes=None,
-        **kwargs
-    ):
-        super(TorchBaseDataset, self).__init__()
-        self.__dict__ = kwargs
-        self.images = images
-        self.labels = labels
-        self.classes = classes
+try:
+    from torch.utils.data import Dataset
 
-    def __len__(self):
-        return len(self.images)
+    class TorchBaseDataset(Dataset):
+        def __init__(
+            self,
+            images=None,
+            labels=None,
+            classes=None,
+            **kwargs
+        ):
+            super(TorchBaseDataset, self).__init__()
+            self.__dict__ = kwargs
+            self.images = images
+            self.labels = labels
+            self.classes = classes
 
-    def __getitem__(self, index):
-        return {"image": self.images[index], "label": self.labels[index]}
+        def __len__(self):
+            return len(self.images)
 
+        def __getitem__(self, index):
+            return {"image": self.images[index], "label": self.labels[index]}
 
-class TFBaseDataset(Sequence):
-    def __init__(
-        self,
-        images=None,
-        labels=None,
-        classes=None,
-        **kwargs
-    ):
-        super(TFBaseDataset, self).__init__()
-        self.__dict__ = kwargs
-        self.images = images
-        self.labels = labels
-        self.classes = classes
+except ImportError:
+    logging.warning("TorchBaseDataset is unable because Pytorch couldn't be imported.")
 
-    def __len__(self):
-        return len(self.images)
+try:
+    from tensorflow.keras.utils import Sequence
 
-    def __getitem__(self, index):
-        return {"image": self.images[index], "label": self.labels[index]}
+    class TFBaseDataset(Sequence):
+        def __init__(
+            self,
+            images=None,
+            labels=None,
+            classes=None,
+            **kwargs
+        ):
+            super(TFBaseDataset, self).__init__()
+            self.__dict__ = kwargs
+            self.images = images
+            self.labels = labels
+            self.classes = classes
+
+        def __len__(self):
+            return len(self.images)
+
+        def __getitem__(self, index):
+            return {"image": self.images[index], "label": self.labels[index]}
+            
+except ImportError:
+    logging.warning("TFBaseDataset is unable because Tensorflow 2 coludn't be imported.")
 
 def base_inheritance(cls):
     def inherit_base(dataset, *args, **kwargs):
