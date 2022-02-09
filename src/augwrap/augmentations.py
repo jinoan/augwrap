@@ -438,7 +438,8 @@ class Sticker(A.BasicTransform):
             x_min, y_min, x_max, y_max = bboxes[i]
             if x_min >= 0 and y_min >= 0 and x_max <= 1 and y_max <= 1:
                 data = self.detach(image, bboxes[i], labels[i])
-                if rst := self.attach(data['image'], bg, data['bboxes'][0], mask_board):
+                rst = self.attach(data['image'], bg, data['bboxes'][0], mask_board)
+                if rst:
                     bg, bbox, mask_board = rst
                     self.attached_bboxes.append(bbox)
                     self.attached_labels.append(data['labels'][0])
