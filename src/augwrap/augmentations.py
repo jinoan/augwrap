@@ -368,9 +368,9 @@ class Sticker(A.BasicTransform):
         bg_h, bg_w, _ = bg.shape
         s = random.uniform(*self.scale_range)
         r = np.pi * random.uniform(*self.degree_range) / 180
-        wps = [random.uniform(*self.wrap_range) for _ in range(4)]
-        mtrx = np.array([[(s + wps[0]) * np.cos(r), (s + wps[1]) * -np.sin(r), 0],
-                         [(s + wps[2]) * np.sin(r), (s + wps[3]) * np.cos(r), 0]])
+        wps = [1 + random.uniform(*self.wrap_range) for _ in range(4)]
+        mtrx = np.array([[s * wps[0] * np.cos(r), s * wps[1] * -np.sin(r), 0],
+                         [s * wps[2] * np.sin(r), s * wps[3] * np.cos(r), 0]])
         x_min, y_min, x_max, y_max = bbox
         _x_min, _y_min, _x_max, _y_max = self.rotate_bbox((x_min * w, y_min * h, x_max * w, y_max * h), mtrx)
         x_min, y_min, x_max, y_max = 0, 0, _x_max - _x_min, _y_max - _y_min
