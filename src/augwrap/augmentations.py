@@ -328,6 +328,7 @@ class Sticker(A.BasicTransform):
         dataset,
         scale_range=(0.95, 1.05),
         degree_range=(-5, 5),
+        wrap_range=(-0.05, 0.05),
         interpolation=cv2.INTER_LINEAR,
         border_mode=cv2.BORDER_CONSTANT,
         backgrounds=None,
@@ -341,6 +342,7 @@ class Sticker(A.BasicTransform):
         self.dataset = dataset
         self.scale_range = scale_range
         self.degree_range = degree_range
+        self.wrap_range = wrap_range
         self.interpolation = interpolation
         self.border_mode = border_mode
         self.backgrounds = backgrounds
@@ -366,8 +368,9 @@ class Sticker(A.BasicTransform):
         bg_h, bg_w, _ = bg.shape
         s = random.uniform(*self.scale_range)
         r = np.pi * random.uniform(*self.degree_range) / 180
-        mtrx = np.array([[s * np.cos(r), s * -np.sin(r), 0],
-                         [s * np.sin(r), s * np.cos(r), 0]])
+        wps = [random.uniform(*self.wrap_range) for _ in range(4)]
+        mtrx = np.array([[(s + wps[0]) * np.cos(r), (s + wps[1]) * -np.sin(r), 0],
+                         [(s + wps[2]) * np.sin(r), (s + wps[3]) * np.cos(r), 0]])
         x_min, y_min, x_max, y_max = bbox
         _x_min, _y_min, _x_max, _y_max = self.rotate_bbox((x_min * w, y_min * h, x_max * w, y_max * h), mtrx)
         x_min, y_min, x_max, y_max = 0, 0, _x_max - _x_min, _y_max - _y_min
