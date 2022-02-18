@@ -323,14 +323,16 @@ class Mosaic(A.BasicTransform):
 
 class Sticker(A.BasicTransform):
     # crop the boxes from target image and paste it on another image.
+    # scale_range: ratio of sticker size to background (float) (0., 1.)
+    # rotate_range: sticker rotation angle (degree) (float) (-360., 360.)
+    # variation_range: ratio of randomly moving sticker vertices (float) (-0.4, 0.4)
     def __init__(
         self,
         dataset,
-        scale_range=(0.95, 1.05),
-        degree_range=(-5, 5),
-        wrap_range=(-0.05, 0.05),
+        scale_range=(0.2, 0.4),
+        rotate_range=(-5, 5),
+        variation_range=(-0.1, 0.1),
         interpolation=cv2.INTER_LINEAR,
-        border_mode=cv2.BORDER_CONSTANT,
         backgrounds=None,
         transforms=[],
         bg_transforms=[],
@@ -341,10 +343,9 @@ class Sticker(A.BasicTransform):
         super(Sticker, self).__init__(always_apply, p)
         self.dataset = dataset
         self.scale_range = scale_range
-        self.degree_range = degree_range
-        self.wrap_range = wrap_range
+        self.rotate_range = rotate_range
+        self.variation_range = variation_range
         self.interpolation = interpolation
-        self.border_mode = border_mode
         self.backgrounds = backgrounds
         self.transforms = transforms
         self.bg_transforms = bg_transforms
@@ -363,32 +364,47 @@ class Sticker(A.BasicTransform):
         transformed = A.Compose(transforms, bbox_params=self.bbox_params)
         return transformed(image=image, bboxes=[bbox], labels=[label])
 
-    def attach(self, sticker, bg, bbox, mask_board):
+    def attach(self, sticker, bg, mask_board):
         h, w, _ = sticker.shape
         bg_h, bg_w, _ = bg.shape
+        
+        # make homography matrix
         s = random.uniform(*self.scale_range)
-        r = np.pi * random.uniform(*self.degree_range) / 180
-        wps = [1 + random.uniform(*self.wrap_range) for _ in range(4)]
-        mtrx = np.array([[s * wps[0] * np.cos(r), s * wps[1] * -np.sin(r), 0],
-                         [s * wps[2] * np.sin(r), s * wps[3] * np.cos(r), 0]])
-        x_min, y_min, x_max, y_max = bbox
-        _x_min, _y_min, _x_max, _y_max = self.rotate_bbox((x_min * w, y_min * h, x_max * w, y_max * h), mtrx)
-        x_min, y_min, x_max, y_max = 0, 0, _x_max - _x_min, _y_max - _y_min
+        r = np.pi * random.uniform(*self.rotate_range) / 180
+        x_min, y_min, x_max, y_max = 0, 0, w, h
+        p_before = [[x_min, y_min], [x_min, y_max], [x_max, y_min], [x_max, y_max]]
+        # variation
+        p_after = [[px + w * random.uniform(*self.variation_range), py + h * random.uniform(*self.variation_range)] for (px, py) in p_before]
+        # rotate
+        p_after = [[px * np.cos(r) - py * np.sin(r), px * np.sin(r) + py * np.cos(r)] for (px, py) in p_after]
+        # calib zero
+        px_min, py_min = min(p_after, key=lambda x: x[0])[0], min(p_after, key=lambda x: x[1])[1]
+        p_after = [[px - px_min, py - py_min] for (px, py) in p_after]
+        px_max, py_max = max(p_after, key=lambda x: x[0])[0], max(p_after, key=lambda x: x[1])[1]
+        # fit in bg and scaling
+        f = min(bg_w / px_max, bg_h / py_max)
+        p_after = [[px * f * s, py * f * s] for (px, py) in p_after]
+        # randomly move
+        px_max, py_max = max(p_after, key=lambda x: x[0])[0], max(p_after, key=lambda x: x[1])[1]
+        px_move, py_move = random.randrange(max(bg_w - int(px_max + 0.5), 0) + 1), random.randrange(max(bg_h - int(py_max + 0.5), 0) + 1)
+        p_after = [[px + px_move, py + py_move] for (px, py) in p_after]
+        # cast
+        p_before, p_after = np.array(p_before, dtype=np.float32), np.array(p_after, dtype=np.float32)
+        mtrx = cv2.getPerspectiveTransform(p_before, p_after)
 
-        x_move = random.randrange(max(bg_w - int(x_max + 0.5), 0) + 1)
-        y_move = random.randrange(max(bg_h - int(y_max + 0.5), 0) + 1)
-        mtrx[0, 2] = x_move - _x_min
-        mtrx[1, 2] = y_move - _y_min
-        mask = cv2.warpAffine(np.ones(sticker.shape, dtype=np.uint8) * 255, mtrx, (bg_w, bg_h), flags=self.interpolation, borderMode=self.border_mode)
+        # make mask
+        mask = cv2.warpPerspective(np.ones(sticker.shape, dtype=np.uint8), mtrx, (bg_w, bg_h), flags=self.interpolation, borderMode=cv2.BORDER_CONSTANT)
 
-        if np.sum(np.max(mask_board, axis=2) * np.max(mask, axis=2)) == 0:
-            sticker = cv2.warpAffine(sticker, mtrx, (bg_w, bg_h), flags=self.interpolation, borderMode=self.border_mode)
-            bg = cv2.bitwise_and(bg, cv2.bitwise_not(mask)) + sticker
+        if np.sum(mask_board * mask) == 0:
+            sticker = cv2.warpPerspective(sticker, mtrx, (bg_w, bg_h), flags=self.interpolation, borderMode=cv2.BORDER_CONSTANT)
+            bg = bg * (mask == 0) + sticker
+            import matplotlib.pyplot as plt
+            plt.imshow(bg)
             mask_board += mask
-            bbox = ((x_min + x_move) / bg_w,
-                    (y_min + y_move) / bg_h,
-                    (x_max + x_move) / bg_w,
-                    (y_max + y_move) / bg_h)
+            bbox = (min(p_after, key=lambda x: x[0])[0] / bg_w,
+                    min(p_after, key=lambda x: x[1])[1] / bg_h,
+                    max(p_after, key=lambda x: x[0])[0] / bg_w,
+                    max(p_after, key=lambda x: x[1])[1] / bg_h)
             return bg, bbox, mask_board
         else:
             return None
@@ -432,7 +448,7 @@ class Sticker(A.BasicTransform):
         for bbox in self.attached_bboxes:
             bg_h, bg_w, _ = bg.shape
             x_min, y_min, x_max, y_max = int(bbox[0] * bg_w + 0.5), int(bbox[1] * bg_h + 0.5), int(bbox[2] * bg_w + 0.5), int(bbox[3] * bg_h + 0.5)
-            mask_board[y_min:y_max+1, x_min:x_max+1, ...] = 255
+            mask_board[y_min:y_max+1, x_min:x_max+1, ...] = 1
         
         indexes = list(range(len(bboxes)))
         random.shuffle(indexes)
@@ -441,7 +457,7 @@ class Sticker(A.BasicTransform):
             x_min, y_min, x_max, y_max = bboxes[i]
             if x_min >= 0 and y_min >= 0 and x_max <= 1 and y_max <= 1:
                 data = self.detach(image, bboxes[i], labels[i])
-                rst = self.attach(data['image'], bg, data['bboxes'][0], mask_board)
+                rst = self.attach(data['image'], bg, mask_board)
                 if rst:
                     bg, bbox, mask_board = rst
                     self.attached_bboxes.append(bbox)
