@@ -72,6 +72,7 @@ class MixUp(A.BasicTransform):
     def __init__(
         self,
         dataset,
+        sub_dataset=None,
         rate_range=(0.3, 0.5),
         mix_label=True,
         always_apply=False,
@@ -79,18 +80,26 @@ class MixUp(A.BasicTransform):
     ):
         super(MixUp, self).__init__(always_apply, p)
         self.dataset = dataset
-        self.sub_sample = None
+        self.sub_dataset = sub_dataset
         self.rate_range = rate_range
         self.r = 0.
         self.mix_label = mix_label
 
     def image_apply(self, image, **kwargs):
         index = random.randrange(self.dataset.__len__())
-        self.sub_sample = self.dataset[index]
-        resize = A.Compose([
-            A.RandomSizedBBoxSafeCrop(*image.shape[:2])
-            ], bbox_params=A.BboxParams(format='albumentations', min_area=0.3, min_visibility=0.3, label_fields=['labels'])
-        )
+
+        if self.sub_dataset is not None:
+            self.sub_sample = self.sub_dataset[index]
+        else:
+            self.sub_sample = self.dataset[index]
+
+        if "bboxes" in self.sub_sample.keys():
+            resize = A.Compose([
+                A.RandomSizedBBoxSafeCrop(*image.shape[:2])
+                ], bbox_params=A.BboxParams(format='albumentations', min_area=0.3, min_visibility=0.3, label_fields=['labels'])
+            )
+        else:
+            resize = A.Resize(*image.shape[:2])
         self.sub_sample = resize(**self.sub_sample)
         self.r = random.uniform(*self.rate_range)
         image = image * (1 - self.r) + self.sub_sample["image"] * self.r
@@ -332,7 +341,6 @@ class Sticker(A.BasicTransform):
         scale_range=(0.2, 0.4),
         rotate_range=(-5, 5),
         variation_range=(-0.1, 0.1),
-        interpolation=cv2.INTER_LINEAR,
         backgrounds=None,
         transforms=[],
         bg_transforms=[],
@@ -345,7 +353,6 @@ class Sticker(A.BasicTransform):
         self.scale_range = scale_range
         self.rotate_range = rotate_range
         self.variation_range = variation_range
-        self.interpolation = interpolation
         self.backgrounds = backgrounds
         self.transforms = transforms
         self.bg_transforms = bg_transforms
@@ -393,13 +400,12 @@ class Sticker(A.BasicTransform):
         mtrx = cv2.getPerspectiveTransform(p_before, p_after)
 
         # make mask
-        mask = cv2.warpPerspective(np.ones(sticker.shape, dtype=np.uint8), mtrx, (bg_w, bg_h), flags=self.interpolation, borderMode=cv2.BORDER_CONSTANT)
+        mask = cv2.warpPerspective(np.ones(sticker.shape, dtype=np.uint8), mtrx, (bg_w, bg_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
 
         if np.sum(mask_board * mask) == 0:
-            sticker = cv2.warpPerspective(sticker, mtrx, (bg_w, bg_h), flags=self.interpolation, borderMode=cv2.BORDER_CONSTANT)
-            bg = bg * (mask == 0) + sticker
-            import matplotlib.pyplot as plt
-            plt.imshow(bg)
+            bg = cv2.warpPerspective(sticker, mtrx, (bg_w, bg_h), bg, borderMode=cv2.BORDER_TRANSPARENT)
+            # bg = cv2.bitwise_and(bg, cv2.bitwise_not(mask))
+            # bg = cv2.bitwise_xor(bg, cv2.bitwise_or(mask, sticker))
             mask_board += mask
             bbox = (min(p_after, key=lambda x: x[0])[0] / bg_w,
                     min(p_after, key=lambda x: x[1])[1] / bg_h,
