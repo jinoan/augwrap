@@ -86,11 +86,11 @@ class MixUp(A.BasicTransform):
         self.mix_label = mix_label
 
     def image_apply(self, image, **kwargs):
-        index = random.randrange(self.dataset.__len__())
-
         if self.sub_dataset is not None:
+            index = random.randrange(self.sub_dataset.__len__())
             self.sub_sample = self.sub_dataset[index]
         else:
+            index = random.randrange(self.dataset.__len__())
             self.sub_sample = self.dataset[index]
 
         if "bboxes" in self.sub_sample.keys():
