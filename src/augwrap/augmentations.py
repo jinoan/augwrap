@@ -345,6 +345,7 @@ class Sticker(A.BasicTransform):
         transforms=[],
         bg_transforms=[],
         bbox_params=None,
+        annotation=True,
         always_apply=False,
         p=0.5,
     ):
@@ -358,6 +359,7 @@ class Sticker(A.BasicTransform):
         self.bg_transforms = bg_transforms
         if bbox_params is None:
             self.bbox_params = A.BboxParams(format=dataset.bbox_format, min_area=0.3, min_visibility=0.3, label_fields=['labels'])
+        self.annotation = annotation
 
     @property
     def target_dependence(self):
@@ -466,8 +468,9 @@ class Sticker(A.BasicTransform):
                 rst = self.attach(data['image'], bg, mask_board)
                 if rst:
                     bg, bbox, mask_board = rst
-                    self.attached_bboxes.append(bbox)
-                    self.attached_labels.append(data['labels'][0])
+                    if self.annotation:
+                        self.attached_bboxes.append(bbox)
+                        self.attached_labels.append(data['labels'][0])
 
         return bg
 
