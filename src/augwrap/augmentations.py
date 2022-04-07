@@ -87,10 +87,13 @@ class MixUp(A.BasicTransform):
     def image_apply(self, image, **kwargs):
         index = random.randrange(self.dataset.__len__())
         self.sub_sample = self.dataset[index]
-        resize = A.Compose([
-            A.RandomSizedBBoxSafeCrop(*image.shape[:2])
-            ], bbox_params=A.BboxParams(format='albumentations', min_area=0.3, min_visibility=0.3, label_fields=['labels'])
-        )
+        if "bboxes" in self.sub_sample.keys():
+            resize = A.Compose([
+                A.RandomSizedBBoxSafeCrop(*image.shape[:2])
+                ], bbox_params=A.BboxParams(format='albumentations', min_area=0.3, min_visibility=0.3, label_fields=['labels'])
+            )
+        else:
+            resize = A.RandomResizedCrop(*image.shape[:2], scale=(0.5, 1.0), ratio=(0.8 ,1.2))
         self.sub_sample = resize(**self.sub_sample)
         self.r = random.uniform(*self.rate_range)
         image = image * (1 - self.r) + self.sub_sample["image"] * self.r
