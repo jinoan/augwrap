@@ -1,2 +1,2 @@
 from __future__ import absolute_import
-from .augmentation import *
+from .CutMix import CutMix
