@@ -56,15 +56,17 @@ class ResizeImage:
 
 @base_inheritance
 class NormalizeImage:
-    def __init__(self, dataset, targets):
+    def __init__(self, dataset, targets, feature_range=(-1, 1)):
         self.__dict__ = dataset.__dict__.copy()
         self.dataset = dataset
         self.targets = targets
+        self.feature_range = feature_range
 
     def __getitem__(self, index):
         sample = self.dataset[index]
+        f_min, f_max = self.feature_range
         for target in self.targets:
-            sample[target] = (sample[target] / 127.5) - 1
+            sample[target] = (sample[target] / 255) * (f_max - f_min) + f_min
         return sample
 
 
