@@ -484,3 +484,59 @@ class Sticker(A.BasicTransform):
     @property
     def targets(self):
         return {'image': self.apply, 'bboxes': self.apply_to_bboxes}
+
+
+class RandomLocationCrop(A.BasicTransform):
+    def __init__(
+        self,
+        height,
+        width,
+        always_apply=False,
+        p=1
+    ):
+        super(RandomLocationCrop, self).__init__(always_apply, p)
+        self.height = height
+        self.width = width
+        self.scale_rate = scale_rate
+        self.scale_limit = scale_limit
+
+    def image_apply(self, image, **kwargs):
+        random.randrange()
+        h, w, c = image.shape
+        y_max = h - self.height
+        x_max = w - self.width
+        y = random.randint(0, y_max - 1)
+        x = random.randint(0, x_max - 1)
+        return image[y:y+self.height, x:x+self.width, :]
+
+    @property
+    def targets(self):
+        return {"image": self.image_apply}
+
+
+class ScaleAtLeast(A.BasicTransform):
+    def __init__(
+        self,
+        scale,
+        interpolation=None,
+        always_apply=False,
+        p=1
+    ):
+        super(ScaleAtLeast, self).__init__(always_apply, p)
+        self.scale = scale
+        self.interpolation = interpolation if interpolation is not None else cv2.INTER_LINEAR
+        self.r = 1
+
+    def image_apply(self, image, **kwargs):
+        h, w, c = image.shape
+        short = min(h, w)
+        if short < self.scale:
+            self.r = self.scale / short
+        return cv2.resize(image, (-int(-h*self.r), -int(-w*self.r)), interpolation=self.interpolation)
+
+    def bboxes_apply(self, bboxes, **kwargs):
+        return [tuple(map(lambda x: -int(-x*self.r), bbox)) for bbox in bboxes]
+
+    @property
+    def targets(self):
+        return {"image": self.image_apply, 'bboxes': self.bboxes_apply}
