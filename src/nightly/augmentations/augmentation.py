@@ -9,54 +9,6 @@ import albumentations as A
 from copy import deepcopy
 
 
-class MixUp(A.BasicTransform):
-    def __init__(
-        self,
-        dataset,
-        sub_dataset=None,
-        rate_range=(0.3, 0.5),
-        mix_label=True,
-        always_apply=False,
-        p=1
-    ):
-        super(MixUp, self).__init__(always_apply, p)
-        self.dataset = dataset
-        self.sub_dataset = sub_dataset
-        self.rate_range = rate_range
-        self.r = 0.
-        self.mix_label = mix_label
-
-    def image_apply(self, image, **kwargs):
-        if self.sub_dataset is not None:
-            index = random.randrange(self.sub_dataset.__len__())
-            self.sub_sample = self.sub_dataset[index]
-        else:
-            index = random.randrange(self.dataset.__len__())
-            self.sub_sample = self.dataset[index]
-
-        if "bboxes" in self.sub_sample.keys():
-            resize = A.Compose([
-                A.RandomSizedBBoxSafeCrop(*image.shape[:2])
-                ], bbox_params=A.BboxParams(format='albumentations', min_area=0.3, min_visibility=0.3, label_fields=['labels'])
-            )
-        else:
-            resize = A.Resize(*image.shape[:2])
-        self.sub_sample = resize(**self.sub_sample)
-        self.r = random.uniform(*self.rate_range)
-        image = image * (1 - self.r) + self.sub_sample["image"] * self.r
-        image = np.uint8(image)
-        return image
-
-    def label_apply(self, label, **kwargs):
-        if self.mix_label:
-            label = label * (1 - self.r) + self.sub_sample["label"] * self.r
-        return label
-
-    @property
-    def targets(self):
-        return {"image": self.image_apply, "label": self.label_apply}
-
-
 class KelvinWB(A.ImageOnlyTransform):
     def __init__(
         self,
