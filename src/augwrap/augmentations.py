@@ -514,7 +514,7 @@ class RandomLocationCrop(A.BasicTransform):
         return {"image": self.image_apply}
 
 
-class ScaleAtLeast(A.BasicTransform):
+class ShortBaseScale(A.BasicTransform):
     def __init__(
         self,
         scale,
@@ -522,17 +522,18 @@ class ScaleAtLeast(A.BasicTransform):
         always_apply=False,
         p=1
     ):
-        super(ScaleAtLeast, self).__init__(always_apply, p)
+        super(ShortBaseScale, self).__init__(always_apply, p)
         self.scale = scale
         self.interpolation = interpolation if interpolation is not None else cv2.INTER_LINEAR
         self.r = 1
 
     def image_apply(self, image, **kwargs):
         h, w, c = image.shape
-        short = min(h, w)
-        if short < self.scale:
-            self.r = self.scale / short
-        return cv2.resize(image, (-int(-h*self.r), -int(-w*self.r)), interpolation=self.interpolation)
+        if h < w:
+            size = (-(-w * self.scale // h), self.scale)
+        else:
+            size = (self.scale, -(-h * self.scale // w))
+        return cv2.resize(image, size, interpolation=self.interpolation)
 
     def bboxes_apply(self, bboxes, **kwargs):
         return [tuple(map(lambda x: -int(-x*self.r), bbox)) for bbox in bboxes]
