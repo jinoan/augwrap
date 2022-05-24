@@ -379,32 +379,32 @@ class Sticker(A.BasicTransform):
         return {'image': self.apply, 'bboxes': self.apply_to_bboxes}
 
 
-class RandomLocationCrop(A.BasicTransform):
-    def __init__(
-        self,
-        height,
-        width,
-        always_apply=False,
-        p=1
-    ):
-        super(RandomLocationCrop, self).__init__(always_apply, p)
-        self.height = height
-        self.width = width
-        self.scale_rate = scale_rate
-        self.scale_limit = scale_limit
+# class RandomLocationCrop(A.BasicTransform):
+#     def __init__(
+#         self,
+#         height,
+#         width,
+#         always_apply=False,
+#         p=1
+#     ):
+#         super(RandomLocationCrop, self).__init__(always_apply, p)
+#         self.height = height
+#         self.width = width
+#         self.scale_rate = scale_rate
+#         self.scale_limit = scale_limit
 
-    def image_apply(self, image, **kwargs):
-        random.randrange()
-        h, w, c = image.shape
-        y_max = h - self.height
-        x_max = w - self.width
-        y = random.randint(0, y_max - 1)
-        x = random.randint(0, x_max - 1)
-        return image[y:y+self.height, x:x+self.width, :]
+#     def image_apply(self, image, **kwargs):
+#         random.randrange()
+#         h, w, c = image.shape
+#         y_max = h - self.height
+#         x_max = w - self.width
+#         y = random.randint(0, y_max - 1)
+#         x = random.randint(0, x_max - 1)
+#         return image[y:y+self.height, x:x+self.width, :]
 
-    @property
-    def targets(self):
-        return {"image": self.image_apply}
+#     @property
+#     def targets(self):
+#         return {"image": self.image_apply}
 
 
 class ShortBaseScale(A.BasicTransform):
