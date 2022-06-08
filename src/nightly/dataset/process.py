@@ -86,8 +86,12 @@ class OneHot:
         return sample
 
     def apply(self, label):
-        stack = [np.array(label == cls, dtype=self.dtype) for cls in self.classes]
-        return np.stack(stack, axis=-1)
+        if label:
+            stack = [np.array(label == cls, dtype=self.dtype) for cls in self.classes]
+            output = np.stack(stack, axis=-1)
+        else:
+            output = np.ones_like(self.classes, dtype=self.dtype) / len(self.classes)
+        return output
 
 
 @base_inheritance
@@ -134,11 +138,12 @@ class Transform:
 
 @base_inheritance
 class TFDataGenerator:
-    def __init__(self, dataset, batch_size=1, shuffle=False):
+    def __init__(self, dataset, batch_size=1, shuffle=False, tuple_map=None):
         self.__dict__ = dataset.__dict__.copy()
         self.dataset = dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
+        self.tuple_map = tuple_map
         self.indices = np.arange(self.dataset.__len__())
         self.on_epoch_end()
 
@@ -151,11 +156,13 @@ class TFDataGenerator:
 
     def __getitem__(self, batch_index):
         indices = self.indices[batch_index*self.batch_size:(batch_index+1)*self.batch_size]
-        result = self.__data_generation(indices)
+        result = self.data_generation(indices)
+        if self.tuple_map:
+            result = self.to_tuple(result, self.tuple_map)
         # return batch size items
         return result
         
-    def __data_generation(self, indices):
+    def data_generation(self, indices):
         result = defaultdict(list)
         for index in indices:
             sample = self.dataset[index]
@@ -164,6 +171,9 @@ class TFDataGenerator:
         for k, v in result.items():
             result[k] = np.stack(v, axis=0)
         return result
+
+    def to_tuple(self, sample, tuple_map):
+        return tuple([sample[k] for k in tuple_map])
 
 
 class KFold:
@@ -179,7 +189,7 @@ class KFold:
             train_dataset = copy(self.dataset)
             train_inputs = defaultdict(list)
             for i in train_indices:
-                for k, v in get_dict_value_index(self.inputs, i):
+                for k, v in get_dict_value_index(self.inputs, i).items():
                     train_inputs[k].append(v)
             train_dataset.__dict__["inputs"] = train_inputs
 
@@ -187,7 +197,7 @@ class KFold:
             valid_dataset = copy(self.dataset)
             valid_inputs = defaultdict(list)
             for i in valid_indices:
-                for k, v in get_dict_value_index(self.inputs, i):
+                for k, v in get_dict_value_index(self.inputs, i).items():
                     valid_inputs[k].append(v)
             valid_dataset.__dict__["inputs"] = valid_inputs
 
