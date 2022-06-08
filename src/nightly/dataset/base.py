@@ -10,8 +10,12 @@ def get_dict_value_index(dct, index):
 
 def base_inheritance(cls):
     def inherit_base(dataset, *args, **kwargs):
-        return type(cls.__name__, (cls, *dataset.__class__.mro(),), {})(dataset, *args, **kwargs)
-
+        cls_name = cls.__name__
+        if isinstance(dataset, list):
+            sup = dataset[0]
+        else:
+            sup = dataset
+        return type(cls_name, (cls, *sup.__class__.mro()[-3:],), {})(dataset, *args, **kwargs)
     return inherit_base
 
 
