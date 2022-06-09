@@ -205,7 +205,7 @@ class KFold:
         return folds
 
 
-@aw.base_inheritance
+@base_inheritance
 class MergeDataset:
     def __init__(self, datasets):
         dct = {}
