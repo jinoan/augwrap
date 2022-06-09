@@ -205,6 +205,28 @@ class KFold:
         return folds
 
 
+@aw.base_inheritance
+class MergeDataset:
+    def __init__(self, datasets):
+        dct = {}
+        for dataset in datasets:
+            dct.update(dataset.__dict__)
+        dct['inputs'] = {}
+        for dataset in datasets:
+            for k, v in dataset.__dict__['inputs'].items():
+                dct['inputs'].setdefault(k, type(v)())
+                dct['inputs'][k] += v
+        self.__dict__ = dct
+        self.datasets = datasets
+        
+    def __getitem__(self, index):
+        for dset in self.datasets:
+            if index >= dset.__len__():
+                index -= dset.__len__()
+                continue
+            return dset[index]
+            
+
 # @base_inheritance
 # class LoadPascalVOCLabels:
 #     def __init__(self, dataset):

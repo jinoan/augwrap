@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 
 
 def get_dict_value_index(dct, index):
@@ -11,11 +12,18 @@ def get_dict_value_index(dct, index):
 def base_inheritance(cls):
     def inherit_base(dataset, *args, **kwargs):
         cls_name = cls.__name__
+
         if isinstance(dataset, list):
             sup = dataset[0]
         else:
             sup = dataset
-        return type(cls_name, (cls, *sup.__class__.mro()[-3:],), {})(dataset, *args, **kwargs)
+
+        if BaseDataset in sup.__class__.mro():
+            mro = sup.__class__.mro()[-2:]
+        else:
+            mro = sup.__class__.mro()[-3:]
+
+        return type(cls_name, (cls, *mro,), {})(dataset, *args, **kwargs)
     return inherit_base
 
 
@@ -26,6 +34,7 @@ class BaseDataset:
         self.__dict__ = kwargs
         self.inputs = inputs
 
+    # @property
     def __len__(self):
         return len(list(self.inputs.values())[0])
 
