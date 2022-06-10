@@ -18,12 +18,7 @@ def base_inheritance(cls):
         else:
             sup = dataset
 
-        if BaseDataset in sup.__class__.mro():
-            mro = sup.__class__.mro()[-2:]
-        else:
-            mro = sup.__class__.mro()[-3:]
-
-        return type(cls_name, (cls, *mro,), {})(dataset, *args, **kwargs)
+        return type(cls_name, (cls, *sup.__class__.mro()[-3:],), {})(dataset, *args, **kwargs)
     return inherit_base
 
 
