@@ -1,25 +1,8 @@
 import logging
 from copy import deepcopy
 
-
-def get_dict_value_index(dct, index):
-    result = {}
-    for k, v in dct.items():
-        result[k] = v[index]
-    return result
-
-
-def base_inheritance(cls):
-    def inherit_base(dataset, *args, **kwargs):
-        cls_name = cls.__name__
-
-        if isinstance(dataset, list):
-            sup = dataset[0]
-        else:
-            sup = dataset
-
-        return type(cls_name, (cls, *sup.__class__.mro()[-3:],), {})(dataset, *args, **kwargs)
-    return inherit_base
+is_torch = True
+is_tf = True
 
 
 class BaseDataset:
@@ -57,6 +40,7 @@ try:
 
 except ImportError:
     logging.warning("TorchBaseDataset is unable because Pytorch couldn't be imported.")
+    is_torch = False
 
 try:
     from tensorflow.keras.utils import Sequence
@@ -78,3 +62,31 @@ try:
 
 except ImportError:
     logging.warning("TFBaseDataset is unable because Tensorflow 2 couldn't be imported.")
+    is_tf = False
+
+
+def get_dict_value_index(dct, index):
+    result = {}
+    for k, v in dct.items():
+        result[k] = v[index]
+    return result
+
+
+def base_inheritance(cls):
+    def inherit_base(dataset, *args, **kwargs):
+        cls_name = cls.__name__
+
+        if isinstance(dataset, list):
+            sup = dataset[0]
+        else:
+            sup = dataset
+
+        if sup.__class__.mro()[-2] == BaseDataset:
+            mro = sup.__class__.mro()[-2:-1]
+        elif is_tf and sup.__class__.mro()[-3] == TFBaseDataset:
+            mro = sup.__class__.mro()[-3:-1]
+        elif is_torch and sup.__class__.mro()[-4] == TorchBaseDataset:
+            mro = sup.__class__.mro()[-4:-2]
+
+        return type(cls_name, (cls, *mro,), {})(dataset, *args, **kwargs)
+    return inherit_base
