@@ -8,6 +8,7 @@ class ChromaKey(A.BasicTransform):
     def __init__(
         self,
         bg_dataset,
+        in_range=((50, 150, 0), (70, 255, 255)),
         height_cut_range=(0.5, 1.),
         width_cut_range=(0.5, 1.),
         top_bottom_margin=(0., 0.),  # (min, max)
@@ -18,6 +19,7 @@ class ChromaKey(A.BasicTransform):
         p=1
     ):
         super(ChromaKey, self).__init__(always_apply, p)
+        self.in_range = in_range
         self.height_cut_range = height_cut_range
         self.width_cut_range = width_cut_range
         self.top_bottom_margin = top_bottom_margin
@@ -78,7 +80,7 @@ class ChromaKey(A.BasicTransform):
 
         frame = frame.astype(np.uint8)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, (50, 150, 0), (100, 255, 255))
+        mask = cv2.inRange(hsv, *self.in_range)
 
         fg_transform = A.Compose(self.fg_transforms)
         frame = fg_transform(image=frame)['image']
