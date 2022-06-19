@@ -1,4 +1,5 @@
 import cv2
+import random
 import numpy as np
 from copy import copy
 from collections import defaultdict
@@ -16,6 +17,9 @@ class LoadImage:
         self.dataset = dataset
         self.targets = targets
         self.color_mode = {1: "color", 0: "grey", -1: "unchanged"}.get(color_mode, color_mode)
+
+    def __len__(self):
+        return self.dataset.__len__()
 
     def __getitem__(self, index):
         sample = self.dataset[index]
@@ -47,6 +51,9 @@ class ResizeImage:
         self.image_size = image_size
         self.interpolation = interpolation
 
+    def __len__(self):
+        return self.dataset.__len__()
+
     def __getitem__(self, index):
         sample = self.dataset[index]
         for target in self.targets:
@@ -63,6 +70,9 @@ class NormalizeImage:
         self.feature_range = feature_range
         self.dtype = dtype
 
+    def __len__(self):
+        return self.dataset.__len__()
+
     def __getitem__(self, index):
         sample = self.dataset[index]
         f_min, f_max = self.feature_range
@@ -73,12 +83,16 @@ class NormalizeImage:
 
 @base_inheritance
 class OneHot:
-    def __init__(self, dataset, targets, classes, dtype=np.float32):
+    def __init__(self, dataset, targets, classes, dummy_value=0., dtype=np.float32):
         self.__dict__ = dataset.__dict__.copy()
         self.dataset = dataset
         self.targets = targets
         self.classes = classes
+        self.dummy_value = dummy_value
         self.dtype = dtype
+
+    def __len__(self):
+        return self.dataset.__len__()
 
     def __getitem__(self, index):
         sample = self.dataset[index]
@@ -91,7 +105,7 @@ class OneHot:
             stack = [np.array(label == cls, dtype=self.dtype) for cls in self.classes]
             output = np.stack(stack, axis=-1)
         else:
-            output = np.ones_like(self.classes, dtype=self.dtype) / len(self.classes)
+            output = np.ones_like(self.classes, dtype=self.dtype) * self.dummy_value
         return output
 
 
@@ -103,6 +117,9 @@ class Sparse:
         self.targets = targets
         self.classes = classes
         self.dtype = dtype
+
+    def __len__(self):
+        return self.dataset.__len__()
 
     def __getitem__(self, index):
         sample = self.dataset[index]
@@ -118,6 +135,9 @@ class Augmentation:
         self.dataset = dataset
         self.augmentations = augmentations
 
+    def __len__(self):
+        return self.dataset.__len__()
+
     def __getitem__(self, index):
         sample = self.dataset[index]
         sample = self.augmentations(**sample)
@@ -130,6 +150,9 @@ class Transform:
         self.__dict__ = dataset.__dict__.copy()
         self.dataset = dataset
         self.transforms = transforms
+
+    def __len__(self):
+        return self.dataset.__len__()
 
     def __getitem__(self, index):
         sample = self.dataset[index]
@@ -219,6 +242,9 @@ class MergeDataset:
                 dct['inputs'][k] += v
         self.__dict__ = dct
         self.datasets = datasets
+
+    def __len__(self):
+        return sum([dataset.__len__() for dataset in self.datasets])
         
     def __getitem__(self, index):
         for dset in self.datasets:
@@ -226,6 +252,22 @@ class MergeDataset:
                 index -= dset.__len__()
                 continue
             return dset[index]
+
+
+@base_inheritance
+class RandomSample:
+    def __init__(self, dataset, sample_size):
+        self.__dict__ = dataset.__dict__.copy()        
+        self.dataset = dataset
+        self.sample_size = sample_size
+
+    def __len__(self):
+        return self.sample_size
+    
+    def __getitem__(self, index):
+        index = random.randrange(self.dataset.__len__())
+        sample = self.dataset[index]
+        return sample
             
 
 # @base_inheritance
