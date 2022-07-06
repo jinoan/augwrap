@@ -81,7 +81,7 @@ class ChromaKey(A.BasicTransform):
         frame = frame.astype(np.uint8)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, *self.in_range)
-        mask = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=1)
+        # mask = cv2.dilate(mask, np.ones((3, 3), np.uint8), iterations=1)
 
         fg_transform = A.Compose(self.fg_transforms)
         frame = fg_transform(image=frame)['image']
